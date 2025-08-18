@@ -1,12 +1,7 @@
 import os
-import sys
-from dotenv import load_dotenv
-from google import genai
 from google.genai import types
 
-# ----------------------------
-# Function schema & tool setup
-# ----------------------------
+# Schema
 schema_get_files_info = types.FunctionDeclaration(
     name="get_files_info",
     description="Lists files in the specified directory along with their sizes, constrained to the working directory.",
@@ -21,104 +16,26 @@ schema_get_files_info = types.FunctionDeclaration(
     ),
 )
 
-available_functions = types.Tool(
-    function_declarations=[schema_get_files_info]
-)
-
-# ----------------------------
-# Local function implementation
-# ----------------------------
-def get_files_info(directory="."):
-    """Lists files in a directory (relative to working directory) with security checks."""
-    working_directory = os.getcwd()  # Hardcoded to current working directory
+# Implementation
+def get_files_info(working_directory, directory=""):
     try:
-        # Build the full path
-        full_path = os.path.join(working_directory, directory)
+        abs_working_dir = os.path.abspath(working_directory)
+        abs_target_dir = os.path.abspath(os.path.join(working_directory, directory))
 
-        # Resolve absolute paths
-        abs_working_directory = os.path.abspath(working_directory)
-        abs_full_path = os.path.abspath(full_path)
+        # Ensure inside working dir
+        if not abs_target_dir.startswith(abs_working_dir + os.sep) and abs_target_dir != abs_working_dir:
+            return f'Error: Cannot list "{directory}" as it is outside the permitted working directory'
 
-        # Security check
-        if not abs_full_path.startswith(abs_working_directory):
-            return {"error": f'Cannot list "{directory}" as it is outside the permitted working directory'}
+        if not os.path.isdir(abs_target_dir):
+            return f'Error: Directory not found: "{directory}"'
 
-        # Ensure it's a directory
-        if not os.path.isdir(abs_full_path):
-            return {"error": f'"{directory}" is not a directory'}
+        files = []
+        for entry in os.listdir(abs_target_dir):
+            entry_path = os.path.join(abs_target_dir, entry)
+            size = os.path.getsize(entry_path) if os.path.isfile(entry_path) else 0
+            files.append({"name": entry, "size": size})
 
-        # Collect directory contents
-        items_info = []
-        for item in os.listdir(abs_full_path):
-            item_path = os.path.join(abs_full_path, item)
-            try:
-                size = os.path.getsize(item_path)
-            except OSError:
-                size = None  # If we can't get size, set None
-
-            items_info.append({
-                "name": item,
-                "file_size": size,
-                "is_dir": os.path.isdir(item_path)
-            })
-
-        return {
-            "directory": directory,
-            "items": items_info
-        }
+        return files
 
     except Exception as e:
-        return {"error": str(e)}
-
-# ----------------------------
-# System prompt
-# ----------------------------
-system_prompt = """
-You are a helpful AI coding agent.
-
-When a user asks a question or makes a request, make a function call plan. You can perform the following operations:
-
-- List files and directories
-
-All paths you provide should be relative to the working directory. You do not need to specify the working directory in your function calls as it is automatically injected for security reasons.
-"""
-
-# ----------------------------
-# Main CLI logic
-# ----------------------------
-if len(sys.argv) < 2:
-    print("Usage: python main.py '<your prompt here>' [--verbose]")
-    sys.exit(1)
-
-user_input = sys.argv[1]
-verbose = "--verbose" in sys.argv
-
-# Load API key and init client
-load_dotenv()
-api_key = os.environ.get("GEMINI_API_KEY")
-client = genai.Client(api_key=api_key)
-
-# Call the model
-response = client.models.generate_content(
-    model="gemini-2.0-flash-001",
-    contents=user_input,
-    config=types.GenerateContentConfig(
-        tools=[available_functions],
-        system_instruction=system_prompt
-    )
-)
-
-# Check if function was called
-if hasattr(response, "function_calls") and response.function_calls:
-    for function_call_part in response.function_calls:
-        print(f"Calling function: {function_call_part.name}({function_call_part.args})")
-
-        # Actually run the function locally
-        if function_call_part.name == "get_files_info":
-            directory_arg = function_call_part.args.get("directory", ".")
-            result = get_files_info(directory_arg)
-            print(result)
-else:
-    print(response.text)
-
-#
+        return f"Error: {str(e)}"

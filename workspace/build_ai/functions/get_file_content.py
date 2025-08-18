@@ -1,6 +1,24 @@
 import os
+from google.genai import types
 from functions.config import MAX_FILE_CHARS
 
+# Function schema (for Gemini)
+schema_get_file_content = types.FunctionDeclaration(
+    name="get_file_content",
+    description="Read the contents of a file",
+    parameters=types.Schema(
+        type=types.Type.OBJECT,
+        properties={
+            "file_path": types.Schema(
+                type=types.Type.STRING,
+                description="Path of the file to read, relative to the working directory",
+            ),
+        },
+        required=["file_path"],
+    ),
+)
+
+# Function implementation (what actually runs)
 def get_file_content(working_directory, file_path):
     try:
         # Resolve the absolute paths

@@ -4,6 +4,18 @@ import sys
 from pkg.calculator import Calculator
 from pkg.render import render
 
+# calculator/main.py
+def calculate(expression=None):
+    output = "Calculator App\nUsage: python main.py '<expression>'\n"
+    if expression:
+        try:
+            result = str(eval(expression))
+        except Exception:
+            result = "Error"
+        output += f"= {result}"
+    return output
+
+
 
 def main():
     calculator = Calculator()
